@@ -1,58 +1,66 @@
-import subprocess as sub
-import argparse
-import re
-import time
+import requests
+from bs4 import BeautifulSoup
+import csv
 
 
-time.sleep(1)
-def get_args():
-  parser = argparse.ArgumentParser()
-  parser.add_argument('-i', dest = 'interface')
-  parser.add_argument('-m', dest = 'new_mac')
-  options = parser.parse_args()
+url = input("Enter a URL to scrape: ")
 
-  
-  if not options.interface:
+response = requests.get(url)
+soup = BeautifulSoup(response.content, 'html.parser')
 
-    parser.error('[-] Please specify an interface name in the arguments.')
-    
-  elif not options.new_mac:
+print("What data do you want to extract?")
+print("1. Title")
+print("2. Meta description")
+print("3. Links")
+print("4. Metadata")
+print("5. Text data")
+print("6. Social Media")
 
-      parser.error('[-] Please specify new MAC Address.')
-      
-  return options
+choices = input("Enter your choices (comma-separated, e.g. 1,3,5): ")
 
-def change_mac(interface, new_mac):
-
-  if len(new_mac) != 17:
-    print('[-] Please enter valid MAC Address')
-    quit()
-  
-  print('\n[+] Changing the MAC Address to', new_mac)
-  sub.call(['sudo', 'ifconfig', interface, 'down'])
-  sub.call(['sudo', 'ifconfig', interface, 'hw', 'ether', new_mac])
-  sub.call(['sudo', 'ifconfig', interface, 'up'])
-  
-def get_current_mac(interface):
-  output = sub.check_output(['ifconfig', interface], universal_newlines = True)
-  search_mac = re.search(r"\w\w:\w\w:\w\w:\w\w:\w\w:\w\w", output)
-  if search_mac:
-    return search_mac.group(0)
-  else:
-    print('[-] Could not read the MAC Address')
-    
-command_args = get_args()
-
-prev_mac = get_current_mac(command_args.interface)
-print('\n[+] MAC Address before changing -> {}'.format(prev_mac))
-
-change_mac(command_args.interface, command_args.new_mac)
-
-changed_mac = get_current_mac(command_args.interface)
-print('\n[+] MAC Address after change -> {}'.format(changed_mac))
-
-if changed_mac == command_args.new_mac:
-  print('\n[+] MAC Address was successfully changed from {} to {}'.format(prev_mac, changed_mac))
-else:
-  print('\n[-] Could not change the MAC Address')
-time.sleep(10)
+choices_list = choices.split(',')
+data = {}
+for choice in choices_list:
+    if choice == '1':
+        data['Title'] = soup.title.string
+    elif choice == '2':
+        data['Meta Description'] = soup.find('meta', attrs={'name': 'description'})['content']
+    elif choice == '3':
+        links = [link.get('href') for link in soup.find_all('a') if link.get('href')]
+        data['Links'] = links
+    elif choice == '4':
+        metadata = {}
+        for tag in soup.find_all('meta'):
+            name = tag.get('name', '')
+            if name:
+                metadata[name] = tag.get('content', '')
+        data.update(metadata)
+    elif choice == '5':
+        text_data = soup.get_text()
+        data['Text Data'] = text_data
+    elif choice == '6':
+        social_media = {}
+        social_tags = soup.find_all('a', href=True)
+        for tag in social_tags:
+            url = tag['href']
+            if 'twitter.com' in url:
+                social_media['Twitter'] = url
+            elif 'facebook.com' in url:
+                social_media['Facebook'] = url
+            elif 'instagram.com' in url:
+                social_media['Instagram'] = url
+            elif 'linkedin.com' in url:
+                social_media['LinkedIn'] = url
+            elif 'youtube.com' in url:
+                social_media['YouTube'] = url
+            else:
+                pass
+        data.update(social_media)
+    else:
+        print(f"Invalid choice: {choice}")
+        
+if data:
+    with open('data.csv', mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow(data.keys())
+        writer.writerow(data.values())
